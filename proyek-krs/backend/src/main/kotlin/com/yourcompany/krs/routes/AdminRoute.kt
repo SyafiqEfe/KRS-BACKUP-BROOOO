@@ -6,6 +6,7 @@ import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import com.yourcompany.krs.models.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
 fun Application.adminRoute() {
     routing {
@@ -35,11 +36,14 @@ fun Application.adminRoute() {
         get("/admin/matakuliah") {
             val matkulList = transaction {
                 MataKuliahTable.selectAll().map {
+                    val dosenId = it[MataKuliahTable.dosenId].value
+                    val dosenNama = DosenTable.select(DosenTable.id eq dosenId).singleOrNull()?.get(DosenTable.nama) ?: "-"
                     mapOf(
+                        "id" to it[MataKuliahTable.id].value,
                         "kode" to it[MataKuliahTable.kode],
                         "nama" to it[MataKuliahTable.nama],
                         "sks" to it[MataKuliahTable.sks],
-                        "dosenId" to it[MataKuliahTable.dosenId],
+                        "dosen" to dosenNama,
                         "ruangan" to it[MataKuliahTable.ruangan],
                         "jamMulai" to it[MataKuliahTable.jamMulai]
                     )

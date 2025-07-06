@@ -37,7 +37,8 @@ export const registerMahasiswa = async (nama, password, dpaId = null) => {
 };
 
 export const getMatakuliah = async () => {
-  const res = await axios.get(`${API_URL}/admin/matakuliah`);
+  const res = await axios.get(`${API_URL}/matakuliah`);
+  // Backend sekarang mengirim array langsung, jadi kita kembalikan saja res.data
   return res.data;
 };
 

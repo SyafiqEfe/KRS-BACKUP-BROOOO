@@ -10,6 +10,7 @@ import com.yourcompany.krs.routes.dosenRoute
 import com.yourcompany.krs.routes.healthRoute
 import com.yourcompany.krs.routes.krsRoute
 import com.yourcompany.krs.routes.mahasiswaRoute
+import com.yourcompany.krs.routes.matakuliahRoute // ✅ 1. IMPORT DITAMBAHKAN
 import com.yourcompany.krs.routes.nilaiRoute
 import io.ktor.server.application.*
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
@@ -31,7 +32,8 @@ fun Application.module() {
     dosenRoute()
     adminRoute()
     krsRoute()
-    nilaiRoute() // Menambahkan routing nilai
-    dosenKRSRoute() // Menambahkan routing untuk dosen melihat matkul yang diampu dan mahasiswa per matkul
-    // TODO: Tambahkan routing matakuliah
+    nilaiRoute()
+    dosenKRSRoute()
+    
+    matakuliahRoute() // ✅ 2. RUTE BARU DIPANGGIL DI SINI
 }
