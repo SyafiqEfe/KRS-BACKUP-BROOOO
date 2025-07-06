@@ -1,61 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { getMatakuliah, submitKRS, getKRS, getNilai } from "../services/api";
 
-// --- Komponen baru untuk KARTU NILAI ---
-const NilaiCard = ({ item }) => (
-  <div
-    style={{
-      border: "1px solid #dee2e6",
-      borderRadius: 8,
-      padding: 16,
-      background: "#fff",
-      boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-    }}
-  >
-    <h4 style={{ marginTop: 0, marginBottom: 4, color: "#0d6efd" }}>
-      {item.matakuliah}
-    </h4>
-    <p style={{ margin: 0, fontSize: "0.9em", color: "#6c757d" }}>
-      Dosen: {item.dosen}
-    </p>
-    <hr style={{ margin: "12px 0", borderColor: "#e9ecef" }} />
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <div>
-        <span style={{ fontWeight: "bold" }}>Nilai: </span>
-        {item.nilai ? (
-          <span
-            style={{
-              background: "#198754",
-              color: "white",
-              padding: "2px 8px",
-              borderRadius: 4,
-            }}
-          >
-            {item.nilai}
-          </span>
-        ) : (
-          <span style={{ fontStyle: "italic", color: "#6c757d" }}>
-            Belum dinilai
-          </span>
-        )}
-      </div>
-      <div>
-        <span style={{ fontWeight: "bold" }}>Keterangan: </span>
-        {item.keterangan || (
-          <span style={{ fontStyle: "italic", color: "#6c757d" }}>-</span>
-        )}
-      </div>
-    </div>
-  </div>
-);
-
-// Komponen untuk baris mata kuliah, agar lebih rapi
+// Komponen untuk baris mata kuliah di tabel utama
 const MatakuliahRow = ({ matkul, isSelected, onSelect, isDisabled }) => (
   <tr
     style={{
@@ -89,10 +35,11 @@ export default function DashboardMahasiswa({ user }) {
   const [allMatakuliah, setAllMatakuliah] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [hasExistingKRS, setHasExistingKRS] = useState(false);
-  const [nilai, setNilai] = useState([]);
+  const [nilaiData, setNilaiData] = useState([]);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Fungsi untuk memuat semua data awal
   const loadInitialData = async () => {
     try {
       setIsLoading(true);
@@ -111,8 +58,7 @@ export default function DashboardMahasiswa({ user }) {
       }
 
       const nilaiRes = await getNilai(user.username);
-      // Hanya tampilkan nilai dari matkul yang ada di KRS
-      setNilai(nilaiRes.nilai.filter((n) => n.nilai !== null) || []);
+      setNilaiData(nilaiRes.nilai || []);
     } catch (error) {
       console.error("Gagal memuat data awal:", error);
       setMessage(
@@ -128,6 +74,7 @@ export default function DashboardMahasiswa({ user }) {
   }, [user]);
 
   const handleSelectToggle = (matkulId) => {
+    setMessage("");
     setSelectedIds((prev) => {
       const newSelection = new Set(prev);
       newSelection.has(matkulId)
@@ -137,13 +84,24 @@ export default function DashboardMahasiswa({ user }) {
     });
   };
 
-  const totalSKS = useMemo(
-    () =>
-      allMatakuliah
-        .filter((mk) => selectedIds.has(mk.id))
-        .reduce((sum, mk) => sum + mk.sks, 0),
-    [selectedIds, allMatakuliah]
-  );
+  // --- MENGGABUNGKAN DATA MATKUL & NILAI MENJADI SATU ---
+  const { totalSKS, selectedMatakuliah } = useMemo(() => {
+    const nilaiMap = new Map(nilaiData.map((n) => [n.matakuliah, n]));
+
+    const selectedArray = allMatakuliah
+      .filter((mk) => selectedIds.has(mk.id))
+      .map((mk) => {
+        const nilaiInfo = nilaiMap.get(mk.nama);
+        return {
+          ...mk,
+          nilai: nilaiInfo?.nilai,
+          keterangan: nilaiInfo?.keterangan,
+        };
+      });
+
+    const sks = selectedArray.reduce((sum, mk) => sum + mk.sks, 0);
+    return { totalSKS: sks, selectedMatakuliah: selectedArray };
+  }, [selectedIds, allMatakuliah, nilaiData]);
 
   const isValidSKS = totalSKS >= 19 && totalSKS <= 24;
 
@@ -192,6 +150,7 @@ export default function DashboardMahasiswa({ user }) {
           marginBottom: 16,
         }}
       >
+        {/* ... Tabel utama untuk memilih mata kuliah (tidak berubah) ... */}
         <table
           style={{ width: "100%", borderCollapse: "collapse", minWidth: 800 }}
         >
@@ -269,30 +228,93 @@ export default function DashboardMahasiswa({ user }) {
         </div>
       )}
 
-      <h3>Nilai & Kehadiran</h3>
-      {/* --- BAGIAN TAMPILAN NILAI YANG BARU --- */}
+      {/* --- TABEL BARU YANG DIGABUNGKAN --- */}
+      <h3>Matakuliah yang Diambil & Nilai</h3>
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
-          gap: 16,
+          overflowX: "auto",
+          border: "1px solid #dee2e6",
+          borderRadius: 8,
         }}
       >
-        {nilai.length > 0 ? (
-          nilai.map((item, index) => <NilaiCard key={index} item={item} />)
-        ) : (
-          <div
-            style={{
-              background: "#f8f9fa",
-              padding: "24px",
-              borderRadius: 8,
-              textAlign: "center",
-              color: "#6c757d",
-            }}
-          >
-            Belum ada data nilai yang diinput oleh dosen.
-          </div>
-        )}
+        <table
+          style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}
+        >
+          <thead style={{ background: "#e9ecef" }}>
+            <tr>
+              <th style={{ padding: "12px 8px", textAlign: "left" }}>Kode</th>
+              <th style={{ padding: "12px 8px", textAlign: "left" }}>
+                Nama Mata Kuliah
+              </th>
+              <th style={{ padding: "12px 8px", textAlign: "center" }}>SKS</th>
+              <th style={{ padding: "12px 8px", textAlign: "left" }}>Dosen</th>
+              <th style={{ padding: "12px 8px", textAlign: "center" }}>
+                Nilai
+              </th>
+              <th style={{ padding: "12px 8px", textAlign: "left" }}>
+                Keterangan
+              </th>
+              <th style={{ padding: "12px 8px", textAlign: "center" }}>
+                Hapus
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {selectedMatakuliah.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 24, textAlign: "center" }}>
+                  Belum ada mata kuliah yang dipilih.
+                </td>
+              </tr>
+            ) : (
+              selectedMatakuliah.map((mk) => (
+                <tr key={`selected-${mk.id}`}>
+                  <td style={{ padding: "12px 8px" }}>{mk.kode}</td>
+                  <td style={{ padding: "12px 8px" }}>{mk.nama}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>
+                    {mk.sks}
+                  </td>
+                  <td style={{ padding: "12px 8px" }}>{mk.dosen}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>
+                    {mk.nilai ? (
+                      <span
+                        style={{
+                          background: "#198754",
+                          color: "white",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          fontSize: "0.9em",
+                        }}
+                      >
+                        {mk.nilai}
+                      </span>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td style={{ padding: "12px 8px" }}>
+                    {mk.keterangan || "-"}
+                  </td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>
+                    <button
+                      onClick={() => handleSelectToggle(mk.id)}
+                      style={{
+                        color: "#dc3545",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        fontSize: "1.2em",
+                      }}
+                    >
+                      &times;
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
