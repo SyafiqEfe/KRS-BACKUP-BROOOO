@@ -2,7 +2,12 @@ package com.yourcompany.krs.models
 
 import kotlinx.serialization.Serializable
 
-// Respons untuk daftar mata kuliah
+@Serializable
+data class GenericResponse(val success: Boolean, val message: String)
+
+@Serializable
+data class RegisterSuccessResponse(val success: Boolean, val nim: String)
+
 @Serializable
 data class MatakuliahResponse(
     val id: Int,
@@ -14,7 +19,6 @@ data class MatakuliahResponse(
     val jamMulai: String
 )
 
-// Respons untuk satu item KRS
 @Serializable
 data class KRSSingleResponse(
     val krsId: Int,
@@ -22,5 +26,43 @@ data class KRSSingleResponse(
     val matakuliah: List<MatakuliahResponse>
 )
 
-// Anda bisa menambahkan data class lain di sini jika dibutuhkan
-// misalnya untuk Nilai, dll.
+@Serializable
+data class KRSListResponse(
+    val success: Boolean,
+    val krs: List<KRSSingleResponse>
+)
+
+@Serializable
+data class NilaiResponse(
+    val matakuliah: String,
+    val sks: Int,
+    val dosen: String,
+    val nilai: String?,
+    val keterangan: String?
+)
+
+@Serializable
+data class NilaiListResponse(
+    val success: Boolean,
+    val nilai: List<NilaiResponse>
+)
+
+@Serializable
+data class MahasiswaInClassResponse(
+    val krsDetailId: Int,
+    val nim: String,
+    val nama: String,
+    val nilai: String?,
+    val keterangan: String?
+)
+
+@Serializable
+data class MatkulDosenResponse(
+    val id: Int,
+    val kode: String,
+    val nama: String,
+    val sks: Int,
+    val ruangan: String,
+    val jamMulai: String,
+    val mahasiswa: List<MahasiswaInClassResponse>
+)

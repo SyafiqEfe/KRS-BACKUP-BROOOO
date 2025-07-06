@@ -11,29 +11,20 @@ export const login = async (username, password, role) => {
   return res.data;
 };
 
-export const registerMahasiswa = async (nama, password, dpaId = null) => {
-  // Generate NIM random 8 digit
-  const nim = Math.floor(10000000 + Math.random() * 90000000).toString();
+export const registerMahasiswa = async (nama, password) => {
   try {
-    const params = new URLSearchParams({ nim, nama, password });
-    if (dpaId !== null && dpaId !== undefined) {
-      params.append("dpaId", dpaId);
-    }
-    const res = await axios.post(`${API_URL}/admin/mahasiswa`, params, {
+    // NIM tidak lagi dibuat di sini, hanya nama dan password yang dikirim
+    const params = new URLSearchParams({ nama, password });
+
+    // Panggil endpoint /register yang benar
+    const res = await axios.post(`${API_URL}/register`, params, {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
     return res.data;
   } catch (error) {
-    // Log backend error message for easier debugging
-    if (error.response && error.response.data) {
-      console.error("Backend error:", error.response.data);
-    } else {
-      console.error("Unknown error:", error);
-    }
+    console.error("Backend error:", error.response?.data || error.message);
     throw error;
   }
-  // NOTE: Pastikan backend menerima field nim, nama, password, dpaId (case-sensitive)
-  // dan endpoint sudah benar. Jika masih error, cek backend validation dan log error di atas.
 };
 
 export const getMatakuliah = async () => {

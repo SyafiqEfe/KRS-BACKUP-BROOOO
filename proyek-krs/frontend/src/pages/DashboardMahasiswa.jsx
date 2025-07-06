@@ -1,245 +1,298 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { getMatakuliah, submitKRS, getKRS, getNilai } from "../services/api";
 
+// --- Komponen baru untuk KARTU NILAI ---
+const NilaiCard = ({ item }) => (
+  <div
+    style={{
+      border: "1px solid #dee2e6",
+      borderRadius: 8,
+      padding: 16,
+      background: "#fff",
+      boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+    }}
+  >
+    <h4 style={{ marginTop: 0, marginBottom: 4, color: "#0d6efd" }}>
+      {item.matakuliah}
+    </h4>
+    <p style={{ margin: 0, fontSize: "0.9em", color: "#6c757d" }}>
+      Dosen: {item.dosen}
+    </p>
+    <hr style={{ margin: "12px 0", borderColor: "#e9ecef" }} />
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      <div>
+        <span style={{ fontWeight: "bold" }}>Nilai: </span>
+        {item.nilai ? (
+          <span
+            style={{
+              background: "#198754",
+              color: "white",
+              padding: "2px 8px",
+              borderRadius: 4,
+            }}
+          >
+            {item.nilai}
+          </span>
+        ) : (
+          <span style={{ fontStyle: "italic", color: "#6c757d" }}>
+            Belum dinilai
+          </span>
+        )}
+      </div>
+      <div>
+        <span style={{ fontWeight: "bold" }}>Keterangan: </span>
+        {item.keterangan || (
+          <span style={{ fontStyle: "italic", color: "#6c757d" }}>-</span>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// Komponen untuk baris mata kuliah, agar lebih rapi
+const MatakuliahRow = ({ matkul, isSelected, onSelect, isDisabled }) => (
+  <tr
+    style={{
+      background: isSelected ? "#e3fcec" : "#fff",
+      transition: "background 0.2s",
+    }}
+  >
+    <td style={{ padding: "12px 8px", textAlign: "center" }}>
+      <input
+        type="checkbox"
+        checked={isSelected}
+        disabled={isDisabled}
+        onChange={() => onSelect(matkul.id)}
+        style={{ transform: "scale(1.2)" }}
+      />
+    </td>
+    <td style={{ padding: "12px 8px" }}>{matkul.kode}</td>
+    <td style={{ padding: "12px 8px" }}>{matkul.nama}</td>
+    <td style={{ padding: "12px 8px", textAlign: "center" }}>{matkul.sks}</td>
+    <td style={{ padding: "12px 8px" }}>{matkul.dosen}</td>
+    <td style={{ padding: "12px 8px", textAlign: "center" }}>
+      {matkul.ruangan}
+    </td>
+    <td style={{ padding: "12px 8px", textAlign: "center" }}>
+      {matkul.jamMulai}
+    </td>
+  </tr>
+);
+
 export default function DashboardMahasiswa({ user }) {
-  const [matkul, setMatkul] = useState([]);
-  const [selected, setSelected] = useState([]); // selected: array of matkul id
-  const [krs, setKrs] = useState([]);
+  const [allMatakuliah, setAllMatakuliah] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [hasExistingKRS, setHasExistingKRS] = useState(false);
   const [nilai, setNilai] = useState([]);
-  const [msg, setMsg] = useState("");
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      const matkulRes = await getMatakuliah();
+      setAllMatakuliah(matkulRes || []);
+
+      const krsRes = await getKRS(user.username);
+      if (krsRes.success && krsRes.krs && krsRes.krs.length > 0) {
+        const latestKRS = krsRes.krs[0];
+        setHasExistingKRS(true);
+        const savedMatkulIds = new Set(latestKRS.matakuliah.map((mk) => mk.id));
+        setSelectedIds(savedMatkulIds);
+      } else {
+        setHasExistingKRS(false);
+        setSelectedIds(new Set());
+      }
+
+      const nilaiRes = await getNilai(user.username);
+      // Hanya tampilkan nilai dari matkul yang ada di KRS
+      setNilai(nilaiRes.nilai.filter((n) => n.nilai !== null) || []);
+    } catch (error) {
+      console.error("Gagal memuat data awal:", error);
+      setMessage(
+        "Gagal memuat data dari server. Cek koneksi atau log backend."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    getMatakuliah().then((res) => {
-      let data = [];
-      if (res && Array.isArray(res.matakuliah)) {
-        data = res.matakuliah;
-      } else if (Array.isArray(res)) {
-        data = res;
-      }
-      // Patch: id selalu number
-      data = data.map((m, idx) => ({
-        ...m,
-        id: m.id !== undefined ? Number(m.id) : idx,
-      }));
-      setMatkul(data);
-    });
-    getKRS(user.username).then((res) => setKrs(res.krs || []));
-    getNilai(user.username).then((res) => setNilai(res.nilai || []));
+    loadInitialData();
   }, [user]);
 
-  // Hitung total SKS dari matkul yang dipilih
-  const totalSKS = selected.reduce((sum, id) => {
-    const mk = matkul.find((m) => m.id === id);
-    return sum + (mk ? mk.sks : 0);
-  }, 0);
-
-  // Validasi SKS
-  const validSKS = totalSKS >= 19 && totalSKS <= 24;
-  const warningSKS =
-    totalSKS < 19
-      ? "SKS kurang dari minimal 19"
-      : totalSKS > 24
-      ? "SKS melebihi maksimal 24"
-      : "";
-
-  // Hapus matkul dari pilihan
-  const handleRemove = (id) => {
-    setSelected((sel) => sel.filter((mid) => mid !== id));
+  const handleSelectToggle = (matkulId) => {
+    setSelectedIds((prev) => {
+      const newSelection = new Set(prev);
+      newSelection.has(matkulId)
+        ? newSelection.delete(matkulId)
+        : newSelection.add(matkulId);
+      return newSelection;
+    });
   };
 
-  // Submit/update KRS
+  const totalSKS = useMemo(
+    () =>
+      allMatakuliah
+        .filter((mk) => selectedIds.has(mk.id))
+        .reduce((sum, mk) => sum + mk.sks, 0),
+    [selectedIds, allMatakuliah]
+  );
+
+  const isValidSKS = totalSKS >= 19 && totalSKS <= 24;
+
   const handleSubmit = async () => {
-    if (!validSKS) return;
-    const res = await submitKRS(user.username, selected);
-    setMsg(
-      res.message || (res.success ? "KRS berhasil disubmit" : "Gagal submit")
-    );
-    if (res.success) getKRS(user.username).then((res) => setKrs(res.krs || []));
+    if (!isValidSKS) {
+      setMessage("Jumlah SKS tidak valid (harus antara 19-24).");
+      return;
+    }
+    try {
+      setMessage("Menyimpan KRS...");
+      const res = await submitKRS(user.username, Array.from(selectedIds));
+      setMessage(res.message || "KRS berhasil disimpan!");
+      if (res.success) {
+        await loadInitialData();
+      }
+    } catch (error) {
+      setMessage("Terjadi error saat submit KRS. Cek log untuk detail.");
+      console.error("Submit error:", error);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div
+        className="container card"
+        style={{ padding: 32, textAlign: "center" }}
+      >
+        Memuat data mahasiswa...
+      </div>
+    );
+  }
 
   return (
     <div
       className="container card"
-      style={{ marginTop: 32, maxWidth: 900, width: "100%" }}
+      style={{ maxWidth: "1200px", margin: "32px auto", padding: "16px 24px" }}
     >
       <h2 style={{ color: "#1976d2" }}>Dashboard Mahasiswa</h2>
-      <h3>Pilih Mata Kuliah (SKS 19-24)</h3>
-      <div style={{ overflowX: "auto", marginBottom: 16 }}>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            minWidth: 700,
-            background: "#f8f9fa",
-            borderRadius: 8,
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#f5f6fa" }}>
-              <th style={{ padding: 8 }}></th>
-              <th style={{ padding: 8 }}>Kode</th>
-              <th style={{ padding: 8 }}>Nama</th>
-              <th style={{ padding: 8 }}>SKS</th>
-              <th style={{ padding: 8 }}>Dosen</th>
-              <th style={{ padding: 8 }}>Ruangan</th>
-              <th style={{ padding: 8 }}>Jam</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matkul.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: 16 }}>
-                  Belum ada data matakuliah.
-                </td>
-              </tr>
-            ) : (
-              matkul.map((mk) => (
-                <tr
-                  key={mk.kode}
-                  style={{
-                    background: selected.includes(mk.id) ? "#e3fcec" : "#fff",
-                  }}
-                >
-                  <td style={{ textAlign: "center" }}>
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(Number(mk.id))}
-                      disabled={
-                        !selected.includes(Number(mk.id)) &&
-                        totalSKS + mk.sks > 24
-                      }
-                      onChange={(e) => {
-                        const mkId = Number(mk.id);
-                        if (e.target.checked) {
-                          setSelected((sel) => [...sel, mkId]);
-                        } else {
-                          setSelected((sel) =>
-                            sel.filter((mid) => mid !== mkId)
-                          );
-                        }
-                        console.log(
-                          "selected",
-                          selected,
-                          "mk.id",
-                          mkId,
-                          typeof mkId
-                        );
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: 8 }}>{mk.kode}</td>
-                  <td style={{ padding: 8 }}>{mk.nama}</td>
-                  <td style={{ padding: 8 }}>{mk.sks}</td>
-                  <td style={{ padding: 8 }}>{mk.dosen}</td>
-                  <td style={{ padding: 8 }}>{mk.ruangan}</td>
-                  <td style={{ padding: 8 }}>{mk.jamMulai}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      <h3>Pilih Mata Kuliah</h3>
       <div
         style={{
-          marginBottom: 12,
-          color: validSKS ? "#388e3c" : "#c62828",
-          fontWeight: 500,
+          overflowX: "auto",
+          border: "1px solid #dee2e6",
+          borderRadius: 8,
+          marginBottom: 16,
         }}
       >
-        Total SKS: <b>{totalSKS}</b>{" "}
-        {validSKS ? "" : "(Minimal 19, Maksimal 24)"}
-        {warningSKS && (
-          <span style={{ marginLeft: 12, color: "#c62828" }}>{warningSKS}</span>
-        )}
-      </div>
-      <button
-        className="btn-primary"
-        onClick={handleSubmit}
-        disabled={!validSKS}
-        style={{ marginBottom: 16 }}
-      >
-        {krs.length > 0 ? "Update Matkul" : "Submit KRS"}
-      </button>
-      {msg && (
-        <div
-          style={{
-            marginTop: 12,
-            color: msg.includes("berhasil") ? "#388e3c" : "#c62828",
-          }}
-        >
-          {msg}
-        </div>
-      )}
-      <h3 style={{ marginTop: 24 }}>Matkul yang Dipilih</h3>
-      <div style={{ overflowX: "auto" }}>
         <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            minWidth: 700,
-            background: "#e3fcec",
-            color: "#256029",
-            borderRadius: 8,
-          }}
+          style={{ width: "100%", borderCollapse: "collapse", minWidth: 800 }}
         >
           <thead>
-            <tr>
-              <th style={{ padding: 8 }}>Kode</th>
-              <th style={{ padding: 8 }}>Nama</th>
-              <th style={{ padding: 8 }}>SKS</th>
-              <th style={{ padding: 8 }}>Dosen</th>
-              <th style={{ padding: 8 }}>Ruangan</th>
-              <th style={{ padding: 8 }}>Jam</th>
-              <th style={{ padding: 8 }}>Hapus</th>
+            <tr style={{ background: "#f8f9fa" }}>
+              <th style={{ padding: "12px 8px" }}>Pilih</th>
+              <th style={{ padding: "12px 8px", textAlign: "left" }}>Kode</th>
+              <th style={{ padding: "12px 8px", textAlign: "left" }}>
+                Nama Mata Kuliah
+              </th>
+              <th style={{ padding: "12px 8px" }}>SKS</th>
+              <th style={{ padding: "12px 8px", textAlign: "left" }}>Dosen</th>
+              <th style={{ padding: "12px 8px" }}>Ruangan</th>
+              <th style={{ padding: "12px 8px" }}>Jam</th>
             </tr>
           </thead>
           <tbody>
-            {selected.length === 0 ? (
+            {allMatakuliah.length > 0 ? (
+              allMatakuliah.map((mk) => (
+                <MatakuliahRow
+                  key={mk.id}
+                  matkul={mk}
+                  isSelected={selectedIds.has(mk.id)}
+                  onSelect={handleSelectToggle}
+                  isDisabled={!selectedIds.has(mk.id) && totalSKS + mk.sks > 24}
+                />
+              ))
+            ) : (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: 16 }}>
-                  Belum ada matkul dipilih.
+                <td colSpan={7} style={{ padding: 24, textAlign: "center" }}>
+                  Tidak ada mata kuliah yang tersedia.
                 </td>
               </tr>
-            ) : (
-              selected.map((id) => {
-                const mk = matkul.find((m) => m.id === id);
-                if (!mk) return null;
-                return (
-                  <tr key={id}>
-                    <td style={{ padding: 8 }}>{mk.kode}</td>
-                    <td style={{ padding: 8 }}>{mk.nama}</td>
-                    <td style={{ padding: 8 }}>{mk.sks}</td>
-                    <td style={{ padding: 8 }}>{mk.dosen}</td>
-                    <td style={{ padding: 8 }}>{mk.ruangan}</td>
-                    <td style={{ padding: 8 }}>{mk.jamMulai}</td>
-                    <td style={{ padding: 8 }}>
-                      <button
-                        style={{
-                          color: "#c62828",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                        }}
-                        onClick={() => handleRemove(id)}
-                      >
-                        Hapus
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
             )}
           </tbody>
         </table>
       </div>
-      <h3 style={{ marginTop: 24 }}>Nilai & Kehadiran</h3>
+
       <div
-        className="nim-box"
-        style={{ background: "#e3f2fd", color: "#1976d2" }}
+        style={{
+          margin: "16px 0",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "10px",
+        }}
       >
-        <pre style={{ margin: 0, fontSize: 15 }}>
-          {JSON.stringify(nilai, null, 2)}
-        </pre>
+        <div style={{ fontWeight: 500, fontSize: "1.1em" }}>
+          Total SKS Dipilih:{" "}
+          <b style={{ color: isValidSKS ? "#28a745" : "#dc3545" }}>
+            {totalSKS}
+          </b>{" "}
+          (Wajib: 19-24)
+        </div>
+        <button
+          className="btn-primary"
+          onClick={handleSubmit}
+          disabled={!isValidSKS}
+        >
+          {hasExistingKRS ? "Update KRS" : "Submit KRS"}
+        </button>
+      </div>
+
+      {message && (
+        <div
+          style={{
+            marginBottom: 16,
+            textAlign: "center",
+            fontWeight: "bold",
+            color: message.includes("berhasil") ? "#28a745" : "#dc3545",
+          }}
+        >
+          {message}
+        </div>
+      )}
+
+      <h3>Nilai & Kehadiran</h3>
+      {/* --- BAGIAN TAMPILAN NILAI YANG BARU --- */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
+          gap: 16,
+        }}
+      >
+        {nilai.length > 0 ? (
+          nilai.map((item, index) => <NilaiCard key={index} item={item} />)
+        ) : (
+          <div
+            style={{
+              background: "#f8f9fa",
+              padding: "24px",
+              borderRadius: 8,
+              textAlign: "center",
+              color: "#6c757d",
+            }}
+          >
+            Belum ada data nilai yang diinput oleh dosen.
+          </div>
+        )}
       </div>
     </div>
   );
